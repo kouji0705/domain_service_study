@@ -8,12 +8,15 @@ import (
 // QuestionBrand は質問 ID の Brand。具体的な質問の一覧は casetype が持つ。
 type QuestionBrand struct{}
 
+// QuestionID は質問の身元。質問文が変わっても回答との対応が壊れないようにする。
 type QuestionID = identity.Identity[QuestionBrand]
 
+// NewQuestionID は空でない文字列から QuestionID を生成する。
 func NewQuestionID(value string) (QuestionID, error) {
 	return identity.NewIdentity[QuestionBrand](value)
 }
 
+// MustQuestionID は静的なカタログ定義向け。空文字はプログラミングエラーとして扱う。
 func MustQuestionID(value string) QuestionID {
 	return identity.MustIdentity[QuestionBrand](value)
 }
@@ -27,6 +30,7 @@ type QuestionDefinition struct {
 	required bool
 }
 
+// NewQuestionDefinition は質問定義を生成する。
 func NewQuestionDefinition(id QuestionID, section valueobject.Section, prompt valueobject.Prompt, required bool) QuestionDefinition {
 	return QuestionDefinition{
 		id:       id,
@@ -36,7 +40,14 @@ func NewQuestionDefinition(id QuestionID, section valueobject.Section, prompt va
 	}
 }
 
-func (q QuestionDefinition) ID() QuestionID               { return q.id }
+// ID は質問の身元を返す。
+func (q QuestionDefinition) ID() QuestionID { return q.id }
+
+// Section は報告書のどの章に属すかを返す。
 func (q QuestionDefinition) Section() valueobject.Section { return q.section }
-func (q QuestionDefinition) Prompt() valueobject.Prompt   { return q.prompt }
-func (q QuestionDefinition) Required() bool               { return q.required }
+
+// Prompt は質問文を返す。
+func (q QuestionDefinition) Prompt() valueobject.Prompt { return q.prompt }
+
+// Required は必須質問かどうかを返す。
+func (q QuestionDefinition) Required() bool { return q.required }
