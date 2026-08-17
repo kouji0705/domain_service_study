@@ -1,67 +1,77 @@
 # Domain Service で作る IT トラブル報告書
 
-Go で Domain Service を使い、IT トラブル報告書を生成する小さなサンプルです。
+## はじめに
 
-報告書の質問は固定ではありません。共通ルール、トラブルの種類、影響度、それまでの回答を合成して決まります。高度なフォームエンジンではなく、その合成と Validation を Domain Service に置くと何が読みやすくなるかを示す実装です。
+DDDのDomainServiceを学習したく、記事を書きました。DomainモデルやValueObjectで完結することが多く、DomainServiceを扱った事がなかったのでこの機会に学習していきます。
 
-この記事では、先にオブジェクトの全体像を見てから、ディレクトリと実際のコードで追い、なぜその置き方にしたかを説明します。
+この記事では、Go で **IT トラブル報告書** を題材に Domain Service の置き場所と役割を体験するための Hands-on サンプルです。報告書の質問は固定ではなく、トラブルの種類・影響度・これまでの回答によって変わります。その「条件に応じた質問の組み立て」と「提出可能かどうかの判定」を Domain Service に置いています。
 
-## 全体像
+## DomainServiceとは？
 
-完成形は `TroubleReport` です。種類と影響度を持ち、回答は Overview / SBAR / Other に振り分けられています。
+Domain Service は、**1つの Entity や Value Object だけでは表現しにくいドメインの処理** を置く場所です。
 
-```mermaid
-flowchart TB
-  subgraph report["TroubleReport"]
-    tt[TroubleType]
-    il[ImpactLevel]
-    ov["Overview : SectionAnswers"]
-    subgraph sbar["SBAR"]
-      sit[Situation]
-      bg[Background]
-      as[Assessment]
-      rec[Recommendation]
-    end
-    ot["Other : SectionAnswers"]
-  end
+たとえばこのサンプルでは、報告書（`TroubleReport`）を作る前に次のような判断が必要になります。
 
-  ov --> item["AnswerItem"]
-  sit --> item
-  bg --> item
-  as --> item
-  rec --> item
-  ot --> item
+- 共通の質問に加えて、PC トラブルなら電源の質問を出す
+- 影響度がチーム以上なら影響人数を聞く
+- 「電源は入りますか？」への回答が `no` なら、電源ランプや AC アダプターの質問を追加する
+- 上記を踏まえたうえで、必須回答が揃っているか検証する
+
+これらは `TroubleReport` 単体の責務ではなく、`CommonModule` や `PCModule` など複数の知識をまたいで協調する処理です。Entity / Value Object に無理に押し込むと、モデルが肥大化したり、application 層にビジネスルールが漏れたりしやすくなります。
+
+Domain Service はその中間に立ち、**ドメイン知識の orchestration（調整）** を担います。
+
+| 置き場 | 役割 | このサンプルでの例 |
+| --- | --- | --- |
+| Entity / Aggregate | 状態と不変条件を持つ | `TroubleReport` |
+| Value Object | 値そのもののルール | `Section`, `Prompt`, `Answer` |
+| Domain Service | 複数のドメイン要素をまたぐ処理 | `TroubleReportService`, `FormSchemaFactory` |
+
+Domain Service は「サービス層（application）」とは別物です。application は HTTP リクエストや DTO の変換を担当し、**ビジネスルールそのもの** は domain に留めます。
+
+## Hands-on
+
+### サンプルの例
+
+このリポジトリの題材は **IT トラブル報告書の作成** です。
+
+利用者はフォームに回答し、最終的に SBAR 形式の報告書が生成されます。質問内容は入力途中で変わります。
+
+```text
+入力
+├─ トラブル種類: pc / network
+├─ 影響度: individual / team / company_wide
+└─ 回答: 質問ID → 回答内容
+
+出力
+└─ TroubleReport（Overview / SBAR / Other に整理された報告書）
 ```
 
-1件の回答 `AnswerItem` は、質問の身元・質問文・回答内容の3つです。質問文が変わっても、対応関係は `QuestionID` で保ちます。
+#### 実行例
 
-```mermaid
-classDiagram
-  class AnswerItem {
-    QuestionID
-    Prompt
-    Answer
-  }
-  class QuestionDefinition {
-    QuestionID
-    Section
-    Prompt
-    required
-  }
-  class FormSchema {
-    QuestionDefinition[]
-  }
-
-  FormSchema *-- QuestionDefinition
-  QuestionDefinition *-- QuestionID
-  QuestionDefinition *-- Section
-  QuestionDefinition *-- Prompt
-  AnswerItem *-- QuestionID
-  AnswerItem *-- Prompt
-  AnswerItem *-- Answer
+```bash
+go run ./cmd
+go test ./...
 ```
 
-`cmd` のサンプルをオブジェクトとして書くと、次のようになります。PC トラブル、影響度はチーム、電源は入らない、という状態です。
+`cmd/main.go` では、PC トラブル・影響度チーム・電源が入らない、というケースを流しています。
+
+```go
+report, err := usecase.Execute(application.CreateTroubleReportRequest{
+	TroubleType: casetype.TroubleTypePC.String(),
+	ImpactLevel: casetype.ImpactLevelTeam.String(),
+	Answers: map[string]string{
+		casetype.QuestionOverviewSummary.String():      "始業時にノートPCの電源が入らない",
+		casetype.QuestionPCPowerOn.String():            "no",
+		casetype.QuestionPCPowerLight.String():         "no",
+		casetype.QuestionPCACAdapterConnected.String():  "yes",
+		casetype.QuestionImpactAffectedPeople.String(): "4",
+		// ... その他の必須回答
+	},
+})
+```
+
+生成される報告書のイメージです。
 
 ```text
 report : TroubleReport
@@ -75,10 +85,8 @@ report : TroubleReport
 │   │   ├─ situation.occurred_at = 2026-08-17 09:00
 │   │   └─ pc.power_on = no
 │   ├─ background
-│   │   ├─ background.before_occurrence = 会議室へ移動して電源ボタンを押した
 │   │   └─ pc.ac_adapter_connected = yes
 │   ├─ assessment
-│   │   ├─ assessment.possible_cause = ACアダプター未接続のままバッテリーが切れた可能性がある
 │   │   └─ pc.power_light = no
 │   └─ recommendation
 │       └─ recommendation.requested_action = 代替PCの貸出と点検を希望します
@@ -86,180 +94,121 @@ report : TroubleReport
     └─ other.notes = 本日中に会議資料を編集する必要がある
 ```
 
-電源が入らないと答えたので、画面表示の質問は出ません。代わりに電源ランプと AC アダプターが追加されています。影響度がチームなので、影響人数も Overview に入ります。
+電源が入らない（`no`）と答えたため、画面表示の質問は出ず、電源ランプと AC アダプターの質問が追加されています。影響度がチームのため、影響人数も Overview に含まれます。
 
-## オブジェクトの依存関係
+#### 処理の流れ
 
-矢印は「使う側 → 使われる側」です。上から下へ読むと、生成の窓口から汎用の値まで一方向です。
+```mermaid
+sequenceDiagram
+    participant App as application
+    participant Svc as TroubleReportService
+    participant Factory as FormSchemaFactory
+    participant CT as casetype modules
+    participant Schema as FormSchema
+    participant Report as TroubleReport
+
+    App->>Svc: NewTroubleReport(troubleType, impactLevel, answers)
+    Svc->>Factory: NewFormSchema(troubleType, impactLevel, answers)
+    Factory->>CT: 共通 / 種類 / 影響度 / 分岐の質問を組み立て
+    Factory-->>Svc: FormSchema
+    Svc->>Schema: Validate(answers)
+    Schema-->>Svc: ok / ValidationError
+    Svc->>Report: NewTroubleReport(...)
+    Report-->>App: *TroubleReport
+```
+
+### 説明
+
+#### 全体像
+
+完成形は `TroubleReport` です。種類と影響度を持ち、回答は Overview / SBAR / Other に振り分けられます。
 
 ```mermaid
 flowchart TB
-  subgraph ds["domainservice"]
-    svc[TroubleReportService]
-    factory[FormSchemaFactory]
-  end
-
-  subgraph ct["casetype  この事例の知識"]
-    common[CommonModule]
-    pc[PCModule]
-    net[NetworkModule]
-    impact[ImpactModule]
-  end
-
-  subgraph md["model  汎用の報告書構造"]
-    report[TroubleReport]
-    def[FormSchema]
-    qdef[QuestionDefinition]
-    answers[Answers]
+  subgraph report["TroubleReport"]
     tt[TroubleType]
     il[ImpactLevel]
-    qid[QuestionID]
+    ov["Overview"]
+    subgraph sbar["SBAR"]
+      sit[Situation]
+      bg[Background]
+      as[Assessment]
+      rec[Recommendation]
+    end
+    ot["Other"]
   end
-
-  subgraph leaf["identity / valueobject"]
-    id[Identity]
-    section[Section]
-    prompt[Prompt]
-    answer[Answer]
-  end
-
-  svc --> factory
-  svc --> report
-  svc --> answers
-  svc --> tt
-  svc --> il
-  factory --> common
-  factory --> pc
-  factory --> net
-  factory --> impact
-  common --> def
-  pc --> def
-  net --> def
-  impact --> def
-  pc --> answers
-  net --> answers
-  def --> qdef
-  qdef --> qid
-  qdef --> section
-  qdef --> prompt
-  report --> tt
-  report --> il
-  tt --> id
-  il --> id
-  qid --> id
-  answers --> answer
 ```
 
-ポイントは次の2つです。
+1件の回答 `AnswerItem` は、質問 ID・質問文・回答内容の3つで構成されます。質問文が変わっても、対応関係は `QuestionID` で保ちます。
 
-- `casetype` は `pc` や `overview.summary` といった、このサンプル固有のカタログと分岐を持つ
-- `model` は報告書の型だけを持つ。`casetype` を知らない
+#### なぜ Domain Service 経由で作るか
 
-`QuestionDefinition` はどの事例でも使える質問の型です。一方「PC の電源は入りますか？」は具体的な事例なので、`casetype.PCModule` が組み立てます。温度感は違いますが、質問の出し分けはこのサンプルの中核なので、どちらも `internal/domain` 配下に置いています。
+提出可能な報告書は、**合成した FormSchema の Validation を通過したときだけ** 作れます。
 
-## パッケージの置き場
-
-```text
-cmd / application
-        ↓
-internal/domain/domainservice   定義の合成と Create
-        ↓
-internal/domain/casetype        既知の種類・質問・分岐
-        ↓
-internal/domain/model           報告書と質問の型
-        ↓
-internal/domain/identity        Identity[Brand]
-internal/domain/valueobject     Prompt / Answer / Section
-```
-
-```mermaid
-flowchart TB
-  app["cmd / application"] --> ds["domain/domainservice"]
-  app --> ct["domain/casetype"]
-  ds --> ct
-  ds --> model["domain/model"]
-  ct --> model
-  ct --> vo["domain/valueobject"]
-  model --> id["domain/identity"]
-  model --> vo
-```
-
-`identity` と `valueobject` は他の内部パッケージに依存しません。`model` から `casetype` / `domainservice` へも依存しません。
-
-| パッケージ | 置くもの | 置かないもの |
-| --- | --- | --- |
-| `valueobject` | `Section` / `Prompt` / `Answer` | トラブル種類や質問一覧 |
-| `identity` | `Identity[Brand]` | 具体的な ID の値 |
-| `model` | `TroubleReport`、`QuestionDefinition`、Brand 付きの型 | `pc` や質問カタログ |
-| `casetype` | 既知の種類・影響度、質問ID、分岐モジュール | 報告書の汎用構造 |
-| `domainservice` | 合成と `Create` の窓口 | 事例ごとの質問文 |
-
-ディレクトリは依存の向きと同じで、下が葉です。
-
-```text
-.
-├── cmd/
-│   └── main.go
-├── internal/
-│   ├── application/
-│   │   ├── create_trouble_report.go
-│   │   └── create_trouble_report_test.go
-│   └── domain/
-│       ├── identity/
-│       │   ├── identity.go
-│       │   └── identity_test.go
-│       ├── valueobject/
-│       │   ├── answer.go
-│       │   ├── prompt.go
-│       │   ├── section.go
-│       │   └── value_object_test.go
-│       ├── model/
-│       │   ├── classification.go      TroubleType / ImpactLevel の型
-│       │   ├── question.go            QuestionID / QuestionDefinition
-│       │   ├── answers.go
-│       │   ├── report_definition.go
-│       │   ├── section_content.go     AnswerItem / SBAR
-│       │   ├── trouble_report.go
-│       │   └── validation_error.go
-│       ├── casetype/
-│       │   ├── trouble_type.go        pc / network
-│       │   ├── impact_level.go        individual / team / company_wide
-│       │   ├── questions.go           質問IDのカタログ
-│       │   ├── common.go
-│       │   ├── pc.go
-│       │   ├── network.go
-│       │   ├── impact.go
-│       │   └── definition.go
-│       └── domainservice/
-│           ├── form_schema_factory.go
-│           └── trouble_report_service.go
-├── go.mod
-└── README.md
-```
-
-テストは各パッケージにあります。上の木は本番コードの置き場です。
-
-## なぜ Domain Service 経由で作るか
-
-提出可能な報告書は、合成した定義の Validation を通過したときだけ作れます。`main` やアプリケーション層が `TroubleReport` を直接組み立てると、必須質問の抜けや分岐ルールの無視が起きやすくなります。
-
-生成窓口は `domainservice.TroubleReportService.Create` に統一しています。
+`main` や application 層が `model.NewTroubleReport` を直接呼ぶと、必須質問の抜けや分岐ルールの無視が起きやすくなります。生成窓口は `TroubleReportService.NewTroubleReport` に統一しています。
 
 ```text
 Request DTO
     ↓ application が Parse する
 TroubleType, ImpactLevel, Answers
-    ↓ TroubleReportService.Create
+    ↓ TroubleReportService.NewTroubleReport
 TroubleReport          Validation を通過した完成形
 ```
 
-application は文字列をドメインの型へ翻訳し、`Create(troubleType, impactLevel, answers)` を呼びます。必須が足りない入力でも型としては渡せます。提出可能かどうかは Domain Service が判定します。通過した回答だけが Overview / SBAR / Other に入ります。
+Go には「兄弟パッケージだけに公開する」仕組みがないため、`model.NewTroubleReport` は公開されています。ただし **application からは直接呼ばない** というルールにしています。
 
-Go には「兄弟パッケージだけに公開する」仕組みがありません。`model.NewTroubleReport` は `domainservice` から呼べるよう公開していますが、アプリケーション層からは直接呼ばない、というルールにしています。
+#### パッケージ構成
 
-## 質問はどう決まるか
+依存の向きは上から下です。
 
-`FormSchemaFactory` は、次の順で `FormSchema` を合成します。
+```text
+cmd / application
+        ↓
+internal/domain/domainservice   FormSchema の生成と TroubleReport の生成
+        ↓
+internal/domain/casetype        既知の種類・質問・分岐（事例知識）
+        ↓
+internal/domain/model           報告書と質問の型（汎用構造）
+        ↓
+internal/domain/identity        Identity[Brand]
+internal/domain/valueobject     Prompt / Answer / Section
+```
+
+| パッケージ | 置くもの | 置かないもの |
+| --- | --- | --- |
+| `valueobject` | `Section` / `Prompt` / `Answer` | トラブル種類や質問一覧 |
+| `identity` | `Identity[Brand]` | 具体的な ID の値 |
+| `model` | `TroubleReport`、`FormSchema`、`QuestionDefinition` | `pc` や質問カタログ |
+| `casetype` | 既知の種類・影響度、質問ID、分岐モジュール | 報告書の汎用構造 |
+| `domainservice` | FormSchema 生成と TroubleReport 生成の窓口 | 事例ごとの質問文 |
+
+```text
+.
+├── cmd/main.go
+├── internal/
+│   ├── application/          ユースケース（DTO → ドメイン型 → Service 呼び出し）
+│   └── domain/
+│       ├── domainservice/    TroubleReportService, FormSchemaFactory
+│       ├── casetype/         CommonModule, PCModule, NetworkModule, ImpactModule
+│       ├── model/            TroubleReport, FormSchema, QuestionDefinition
+│       ├── identity/         Identity[Brand]
+│       └── valueobject/      Section, Prompt, Answer
+└── go.mod
+```
+
+#### Domain Service の中身
+
+Domain Service は2つの部品に分かれています。
+
+**1. `FormSchemaFactory` — 質問項目の定義を生成する**
+
+条件（トラブル種類・影響度・回答）を受け取り、今回有効な `FormSchema` を返します。
+
+```go
+schema, err := factory.NewFormSchema(troubleType, impactLevel, answers)
+```
+
+内部では次の順でモジュールを `Combine` します。
 
 1. 共通定義（概要、発生時刻、希望対応など）
 2. トラブル種類の基本定義（PC なら電源、ネットワークなら接続種別）
@@ -271,273 +220,56 @@ flowchart LR
   common[共通] --> type[種類]
   type --> impact[影響度]
   impact --> branch[回答依存]
-  branch --> def[FormSchema]
-  def --> validate[Validate]
+  branch --> schema[FormSchema]
+  schema --> validate[Validate]
   validate --> report[TroubleReport]
 ```
 
-PC で電源が入らないと答えた場合だけ、電源ランプと AC アダプターが追加されます。先回りしては出しません。
-
-影響度が全社のときは、代替手段の質問を足し、共通の「希望する対応」を必須へ上書きします。同じ質問IDは重複追加しません。
-
-未知のトラブル種類や影響度は、DTO を `casetype.ParseTroubleType` / `ParseImpactLevel` する時点でエラーになります。
-
-## 値オブジェクトと Identity
-
-身元を持たない汎用の値は `valueobject` に置きます。標準ライブラリ以外に依存しません。
-
-- `Section` は未知の値では作れない
-- `Prompt` は空の質問文を許さない
-- `Answer` は1つの回答内容（`yes` / `no` など）
-
-`TroubleType` / `ImpactLevel` / `QuestionID` の型は `model` の `Identity[Brand]` です。同じ文字列でも、別 Brand の ID へは代入できません。既知の値（`pc`、`network`、質問カタログ）だけが `casetype` にあります。
-
-## コードを追う
-
-図の下から、実際のコードを上へ辿ります。
-
-### 葉: Identity と Prompt
-
-`Identity` は Brand で別概念を混ぜないための型です。空文字では作れません。
+**2. `TroubleReportService` — 報告書を生成する窓口**
 
 ```go
-// internal/domain/identity/identity.go
-type Identity[Brand any] struct {
-	value string
-}
-
-func NewIdentity[Brand any](value string) (Identity[Brand], error) {
-	if strings.TrimSpace(value) == "" {
-		return Identity[Brand]{}, &EmptyIdentityError{}
-	}
-	return Identity[Brand]{value: value}, nil
-}
+report, err := service.NewTroubleReport(troubleType, impactLevel, answers)
 ```
 
-`Prompt` も空を許さない値オブジェクトです。カタログの静的な質問文は `MustPrompt` で書きます。
+FormSchema を生成し、必須回答を検証してから `TroubleReport` を組み立てます。質問項目の定義だけ欲しい場合は `NewFormSchema` も使えます。
 
 ```go
-// internal/domain/valueobject/prompt.go
-func NewPrompt(value string) (Prompt, error) {
-	if strings.TrimSpace(value) == "" {
-		return Prompt{}, &EmptyPromptError{}
-	}
-	return Prompt{value: value}, nil
-}
+schema, err := service.NewFormSchema(troubleType, impactLevel, answers)
 ```
 
-### 汎用構造: 型だけ model に置く
+#### 事例知識は casetype に閉じ込める
 
-`TroubleType` は Identity の別名です。`pc` という値はここにはありません。
-
-```go
-// internal/domain/model/classification.go
-type TroubleBrand struct{}
-
-type TroubleType = identity.Identity[TroubleBrand]
-```
-
-質問も同じです。`QuestionDefinition` は ID・章・質問文・必須かどうかだけを持ちます。
+「PC の電源は入りますか？」のような具体的な質問は `casetype.PCModule` が持ちます。`model` は質問の**型**（`QuestionDefinition`）だけを知り、`pc` という値や分岐条件は知りません。
 
 ```go
-// internal/domain/model/question.go
-type QuestionBrand struct{}
-
-type QuestionID = identity.Identity[QuestionBrand]
-
-type QuestionDefinition struct {
-	id       QuestionID
-	section  valueobject.Section
-	prompt   valueobject.Prompt
-	required bool
-}
-```
-
-### 事例知識: casetype が既知の値と分岐を持つ
-
-種類のカタログと Parse は `casetype` です。未知の文字列はここで落ちます。
-
-```go
-// internal/domain/casetype/trouble_type.go
-var (
-	TroubleTypePC      = model.MustTroubleType("pc")
-	TroubleTypeNetwork = model.MustTroubleType("network")
-)
-
-func ParseTroubleType(value string) (model.TroubleType, error) {
-	for _, candidate := range []model.TroubleType{TroubleTypePC, TroubleTypeNetwork} {
-		if value == candidate.String() {
-			return candidate, nil
-		}
-	}
-	return model.TroubleType{}, &UnknownTroubleTypeError{Value: value}
-}
-```
-
-質問IDもカタログです。`model.MustQuestionID` で型だけ借りて、値は casetype が持ちます。
-
-```go
-// internal/domain/casetype/questions.go
-var (
-	QuestionOverviewSummary      = model.MustQuestionID("overview.summary")
-	QuestionPCPowerOn            = model.MustQuestionID("pc.power_on")
-	QuestionPCPowerLight         = model.MustQuestionID("pc.power_light")
-	QuestionPCACAdapterConnected = model.MustQuestionID("pc.ac_adapter_connected")
-	QuestionPCScreenVisible      = model.MustQuestionID("pc.screen_visible")
-)
-```
-
-PC の分岐は `PCModule` です。電源の回答がまだなければ、先の質問は出しません。
-
-```go
-// internal/domain/casetype/pc.go
+// casetype/pc.go — 電源の回答に応じて分岐
 func (PCModule) NewAnswerDependentFormSchema(answers model.Answers) model.FormSchema {
 	value, ok := answers.Get(QuestionPCPowerOn)
 	if !ok || value.IsBlank() {
-		return model.FormSchema{}
+		return model.FormSchema{} // まだ分岐できない
 	}
-
 	switch {
 	case value.IsNo():
-		return mustFormSchema(
-			model.NewQuestionDefinition(
-				QuestionPCPowerLight,
-				valueobject.SectionAssessment,
-				valueobject.MustPrompt("電源ランプは点灯していますか？"),
-				true,
-			),
-			model.NewQuestionDefinition(
-				QuestionPCACAdapterConnected,
-				valueobject.SectionBackground,
-				valueobject.MustPrompt("ACアダプターは接続されていますか？"),
-				true,
-			),
-		)
+		// 電源ランプ、ACアダプターの質問を追加
 	case value.IsYes():
-		return mustFormSchema(
-			model.NewQuestionDefinition(
-				QuestionPCScreenVisible,
-				valueobject.SectionSituation,
-				valueobject.MustPrompt("画面は表示されていますか？"),
-				true,
-			),
-		)
-	default:
-		return model.FormSchema{}
+		// 画面表示の質問を追加
 	}
 }
 ```
 
-### 生成: Factory はモジュールを組み合わせる
+トラブル種類が増えても、`casetype` にモジュールを足し、`FormSchemaFactory` の差し替え点を増やすだけで対応できます。`model` や application は変更不要です。
 
-`FormSchemaFactory` は質問文を知りません。共通 → 種類 → 影響度 → 回答依存の順で `Combine` します。
+#### このサンプルで学べること
 
-```go
-// internal/domain/domainservice/form_schema_factory.go
-func (c FormSchemaFactory) Compose(
-	troubleType model.TroubleType,
-	impactLevel model.ImpactLevel,
-	answers model.Answers,
-) (model.FormSchema, error) {
-	if !casetype.IsKnownTroubleType(troubleType) {
-		return model.FormSchema{}, &casetype.UnknownTroubleTypeError{Value: troubleType.String()}
-	}
-	if !casetype.IsKnownImpactLevel(impactLevel) {
-		return model.FormSchema{}, &casetype.UnknownImpactLevelError{Value: impactLevel.String()}
-	}
+- Domain Service を置くべきタイミング（複数のドメイン知識をまたぐ処理）
+- Entity / Value Object / Domain Service の責務分担
+- 事例知識（`casetype`）と汎用構造（`model`）の分離
+- 条件に応じた FormSchema 生成と Validation の流れ
+- application 層と domain 層の境界（DTO は application、ルールは domain）
 
-	typeModule, err := c.typeModule(troubleType)
-	if err != nil {
-		return model.FormSchema{}, err
-	}
+#### 詳細ドキュメント
 
-	def := c.common.NewFormSchema()
-	def, err = def.Combine(typeModule.NewBaseFormSchema())
-	if err != nil {
-		return model.FormSchema{}, err
-	}
-	def, err = def.Combine(c.impact.NewFormSchema(impactLevel))
-	if err != nil {
-		return model.FormSchema{}, err
-	}
-	def, err = def.Combine(typeModule.NewAnswerDependentFormSchema(answers))
-	if err != nil {
-		return model.FormSchema{}, err
-	}
-	return c.impact.ApplyRequiredOverrides(def, impactLevel)
-}
-```
+より詳しい説明は `internal/domain/domainservice/` 配下にあります。
 
-### 生成窓口: Validate を通ったものだけ Report になる
-
-```go
-// internal/domain/domainservice/trouble_report_service.go
-func (s TroubleReportService) Create(
-	troubleType model.TroubleType,
-	impactLevel model.ImpactLevel,
-	answers model.Answers,
-) (*model.TroubleReport, error) {
-	def, err := s.factory.NewFormSchema(troubleType, impactLevel, answers)
-	if err != nil {
-		return nil, err
-	}
-	if err := def.Validate(answers); err != nil {
-		return nil, err
-	}
-	return model.NewTroubleReport(troubleType, impactLevel, def, answers), nil
-}
-```
-
-アプリケーション層は文字列 DTO を受け取り、`casetype.Parse*` で既知の種類へ変換してから Service に渡します。Domain Service に DTO は渡しません。
-
-```go
-// internal/application/create_trouble_report.go
-func (u CreateTroubleReportUseCase) Execute(req CreateTroubleReportRequest) (*model.TroubleReport, error) {
-	troubleType, err := casetype.ParseTroubleType(req.TroubleType)
-	if err != nil {
-		return nil, err
-	}
-	impactLevel, err := casetype.ParseImpactLevel(req.ImpactLevel)
-	if err != nil {
-		return nil, err
-	}
-	answers, err := model.NewAnswersFromStrings(req.Answers)
-	if err != nil {
-		return nil, err
-	}
-	return u.service.NewTroubleReport(troubleType, impactLevel, answers)
-}
-```
-
-`cmd` は PC・チーム・電源オフの例を流すだけです。
-
-```go
-// cmd/main.go
-service := domainservice.NewTroubleReportService(domainservice.NewFormSchemaFactory())
-usecase := application.NewCreateTroubleReportUseCase(service)
-
-report, err := usecase.Execute(application.CreateTroubleReportRequest{
-	TroubleType: casetype.TroubleTypePC.String(),
-	ImpactLevel: casetype.ImpactLevelTeam.String(),
-	Answers: map[string]string{
-		casetype.QuestionOverviewSummary.String():      "始業時にノートPCの電源が入らない",
-		casetype.QuestionPCPowerOn.String():            valueobject.AnswerNo.String(),
-		casetype.QuestionPCPowerLight.String():         valueobject.AnswerNo.String(),
-		casetype.QuestionPCACAdapterConnected.String(): valueobject.AnswerYes.String(),
-		casetype.QuestionImpactAffectedPeople.String(): "4",
-		// 共通の必須回答は省略
-	},
-})
-```
-
-## 実行方法
-
-```bash
-go run ./cmd
-```
-
-PC トラブル、影響度はチーム全体、電源が入らない、という例を標準出力へ出します。
-
-```bash
-go test ./...
-```
+- [trouble_report_service.md](./internal/domain/domainservice/trouble_report_service.md) — 報告書生成の窓口
+- [form_schema_factory.md](./internal/domain/domainservice/form_schema_factory.md) — 質問項目定義の生成
