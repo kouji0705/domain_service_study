@@ -1,7 +1,8 @@
-## `form_schema_composer.go` がやること（全体像）
+## `form_schema_factory.go` がやること（全体像）
 
-`FormSchemaComposer` は、「この回答にはどんな質問項目を聞くべきか？」を決める部品です。
-入力された `troubleType / impactLevel / answers` を元に、最終的な `model.FormSchema`（質問項目の定義）を合成して返します。
+`FormSchemaFactory` は、条件に応じて `FormSchema` を**生成する Factory** です。
+
+「Composer（合成する人）」という名前は、内部で共通・種類別・影響度別・分岐の各パーツを `Combine` して1つにまとめている、という実装の見え方から付けていました。ただ、外から見るとやっていることは「入力を渡したら FormSchema を作って返す」なので、より一般的な **Factory** の方が意図が伝わりやすいと判断し、改名しました。
 
 ## 返すもの / 入力するもの
 
@@ -24,7 +25,7 @@
 
 ## 詳細：モジュール構造
 
-合成はモジュール単位で行われます。
+生成はモジュール単位で行われます。
 
 - `casetype.CommonModule`：全報告書に共通な質問項目
 - `casetype.(PCModule|NetworkModule)`：トラブル種類ごとの基本質問 + 回答依存の分岐質問
@@ -32,7 +33,7 @@
 
 またトラブル種類側は `typeFormSchemaModule` という抽象で、「差し替え点」として表現しています。
 
-## 詳細：`Compose` がやっている合成の順番
+## 詳細：`NewFormSchema` がやっている生成の順番
 
 実装の順番に沿って書くと、概ね以下です。
 

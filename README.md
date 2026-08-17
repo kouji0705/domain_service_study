@@ -96,7 +96,7 @@ report : TroubleReport
 flowchart TB
   subgraph ds["domainservice"]
     svc[TroubleReportService]
-    composer[FormSchemaComposer]
+    factory[FormSchemaFactory]
   end
 
   subgraph ct["casetype  この事例の知識"]
@@ -123,15 +123,15 @@ flowchart TB
     answer[Answer]
   end
 
-  svc --> composer
+  svc --> factory
   svc --> report
   svc --> answers
   svc --> tt
   svc --> il
-  composer --> common
-  composer --> pc
-  composer --> net
-  composer --> impact
+  factory --> common
+  factory --> pc
+  factory --> net
+  factory --> impact
   common --> def
   pc --> def
   net --> def
@@ -231,7 +231,7 @@ flowchart TB
 │       │   ├── impact.go
 │       │   └── definition.go
 │       └── domainservice/
-│           ├── definition_composer.go
+│           ├── form_schema_factory.go
 │           └── trouble_report_service.go
 ├── go.mod
 └── README.md
@@ -259,7 +259,7 @@ Go には「兄弟パッケージだけに公開する」仕組みがありま�
 
 ## 質問はどう決まるか
 
-`FormSchemaComposer` は、次の順で `FormSchema` を合成します。
+`FormSchemaFactory` は、次の順で `FormSchema` を合成します。
 
 1. 共通定義（概要、発生時刻、希望対応など）
 2. トラブル種類の基本定義（PC なら電源、ネットワークなら接続種別）
@@ -428,13 +428,13 @@ func (PCModule) NewAnswerDependentFormSchema(answers model.Answers) model.FormSc
 }
 ```
 
-### 合成: Composer はモジュールを足すだけ
+### 生成: Factory はモジュールを組み合わせる
 
-`FormSchemaComposer` は質問文を知りません。共通 → 種類 → 影響度 → 回答依存の順で `Combine` します。
+`FormSchemaFactory` は質問文を知りません。共通 → 種類 → 影響度 → 回答依存の順で `Combine` します。
 
 ```go
-// internal/domain/domainservice/definition_composer.go
-func (c FormSchemaComposer) Compose(
+// internal/domain/domainservice/form_schema_factory.go
+func (c FormSchemaFactory) Compose(
 	troubleType model.TroubleType,
 	impactLevel model.ImpactLevel,
 	answers model.Answers,
@@ -477,7 +477,7 @@ func (s TroubleReportService) Create(
 	impactLevel model.ImpactLevel,
 	answers model.Answers,
 ) (*model.TroubleReport, error) {
-	def, err := s.composer.NewFormSchema(troubleType, impactLevel, answers)
+	def, err := s.factory.NewFormSchema(troubleType, impactLevel, answers)
 	if err != nil {
 		return nil, err
 	}
@@ -513,7 +513,7 @@ func (u CreateTroubleReportUseCase) Execute(req CreateTroubleReportRequest) (*mo
 
 ```go
 // cmd/main.go
-service := domainservice.NewTroubleReportService(domainservice.NewFormSchemaComposer())
+service := domainservice.NewTroubleReportService(domainservice.NewFormSchemaFactory())
 usecase := application.NewCreateTroubleReportUseCase(service)
 
 report, err := usecase.Execute(application.CreateTroubleReportRequest{

@@ -11,22 +11,22 @@ type typeFormSchemaModule interface {
 	NewAnswerDependentFormSchema(answers model.Answers) model.FormSchema
 }
 
-// FormSchemaComposer は共通・種類別・影響度別・回答依存の質問項目定義を合成する。
-type FormSchemaComposer struct {
+// FormSchemaFactory は条件に応じて FormSchema を生成する Factory。
+type FormSchemaFactory struct {
 	common  casetype.CommonModule
 	pc      casetype.PCModule
 	network casetype.NetworkModule
 	impact  casetype.ImpactModule
 }
 
-// NewFormSchemaComposer は FormSchemaComposer を生成する。
-func NewFormSchemaComposer() FormSchemaComposer {
-	return FormSchemaComposer{}
+// NewFormSchemaFactory は FormSchemaFactory を生成する。
+func NewFormSchemaFactory() FormSchemaFactory {
+	return FormSchemaFactory{}
 }
 
 // NewFormSchema は共通・種類別・影響度別・回答依存の質問項目定義を合成して生成する。
 // トラブル種類または影響度が未知の場合はエラーを返す。
-func (c FormSchemaComposer) NewFormSchema(
+func (f FormSchemaFactory) NewFormSchema(
 	troubleType model.TroubleType,
 	impactLevel model.ImpactLevel,
 	answers model.Answers,
@@ -38,17 +38,17 @@ func (c FormSchemaComposer) NewFormSchema(
 		return model.FormSchema{}, &casetype.UnknownImpactLevelError{Value: impactLevel.String()}
 	}
 
-	typeModule, err := c.typeModule(troubleType)
+	typeModule, err := f.typeModule(troubleType)
 	if err != nil {
 		return model.FormSchema{}, err
 	}
 
-	schema := c.common.NewFormSchema()
+	schema := f.common.NewFormSchema()
 	schema, err = schema.Combine(typeModule.NewBaseFormSchema())
 	if err != nil {
 		return model.FormSchema{}, err
 	}
-	schema, err = schema.Combine(c.impact.NewFormSchema(impactLevel))
+	schema, err = schema.Combine(f.impact.NewFormSchema(impactLevel))
 	if err != nil {
 		return model.FormSchema{}, err
 	}
@@ -56,15 +56,15 @@ func (c FormSchemaComposer) NewFormSchema(
 	if err != nil {
 		return model.FormSchema{}, err
 	}
-	return c.impact.ApplyRequiredOverrides(schema, impactLevel)
+	return f.impact.ApplyRequiredOverrides(schema, impactLevel)
 }
 
-func (c FormSchemaComposer) typeModule(troubleType model.TroubleType) (typeFormSchemaModule, error) {
+func (f FormSchemaFactory) typeModule(troubleType model.TroubleType) (typeFormSchemaModule, error) {
 	switch {
 	case casetype.IsPC(troubleType):
-		return c.pc, nil
+		return f.pc, nil
 	case casetype.IsNetwork(troubleType):
-		return c.network, nil
+		return f.network, nil
 	default:
 		return nil, &casetype.UnknownTroubleTypeError{Value: troubleType.String()}
 	}

@@ -16,4 +16,4 @@
 ## ドキュメント
 
 - [trouble_report_service.md](./trouble_report_service.md) — 報告書生成の窓口
-- [form_schema_composer.md](./form_schema_composer.md) — 質問項目定義の合成
+- [form_schema_factory.md](./form_schema_factory.md) — 質問項目定義の生成

@@ -11,7 +11,7 @@ import (
 )
 
 func TestNewFormSchema(t *testing.T) {
-	service := NewTroubleReportService(NewFormSchemaComposer())
+	service := NewTroubleReportService(NewFormSchemaFactory())
 
 	tests := []struct {
 		name         string
@@ -139,7 +139,7 @@ func TestNewFormSchema(t *testing.T) {
 }
 
 func TestNewFormSchemaUnknownValues(t *testing.T) {
-	service := NewTroubleReportService(NewFormSchemaComposer())
+	service := NewTroubleReportService(NewFormSchemaFactory())
 
 	t.Run("未知のトラブル種類はエラーになる", func(t *testing.T) {
 		_, err := service.NewFormSchema(model.TroubleType{}, casetype.ImpactLevelIndividual, answersOf(nil))
@@ -178,7 +178,7 @@ func TestNewFormSchemaDuplicateQuestionID(t *testing.T) {
 }
 
 func TestNewTroubleReport(t *testing.T) {
-	service := NewTroubleReportService(NewFormSchemaComposer())
+	service := NewTroubleReportService(NewFormSchemaFactory())
 
 	t.Run("必須回答がすべて揃っていればTroubleReportを生成できる", func(t *testing.T) {
 		report, err := service.NewTroubleReport(casetype.TroubleTypePC, casetype.ImpactLevelTeam, answersOf(validPCTeamPowerOffAnswers()))

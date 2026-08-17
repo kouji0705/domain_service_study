@@ -10,7 +10,7 @@ import (
 
 func TestExecuteUnknownValues(t *testing.T) {
 	usecase := NewCreateTroubleReportUseCase(
-		domainservice.NewTroubleReportService(domainservice.NewFormSchemaComposer()),
+		domainservice.NewTroubleReportService(domainservice.NewFormSchemaFactory()),
 	)
 
 	t.Run("未知のトラブル種類はエラーになる", func(t *testing.T) {

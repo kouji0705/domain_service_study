@@ -5,7 +5,7 @@
 
 このサービスの役割は大きく 2 段階です。
 
-1. **質問項目の定義（FormSchema）を生成する**（`FormSchemaComposer` に委譲）
+1. **質問項目の定義（FormSchema）を生成する**（`FormSchemaFactory` に委譲）
 2. **FormSchema に基づいて TroubleReport を生成する**（+ `Validate`）
 
 ## シーケンス図（`NewTroubleReport` の流れ）
@@ -14,7 +14,7 @@
 sequenceDiagram
     participant App as application/usecase
     participant Svc as domainservice.TroubleReportService
-    participant Comp as domainservice.FormSchemaComposer
+    participant Factory as domainservice.FormSchemaFactory
     participant Common as casetype.CommonModule
     participant Type as casetype.(PCModule|NetworkModule)
     participant Impact as casetype.ImpactModule
@@ -22,12 +22,12 @@ sequenceDiagram
     participant Report as model.TroubleReport
 
     App->>Svc: NewTroubleReport(troubleType, impactLevel, answers)
-    Svc->>Comp: NewFormSchema(troubleType, impactLevel, answers)
-    Comp->>Common: NewFormSchema()
-    Comp->>Type: NewBaseFormSchema()
-    Comp->>Impact: NewFormSchema(impactLevel)
-    Comp->>Type: NewAnswerDependentFormSchema(answers)
-    Comp-->>Svc: FormSchema (schema)
+    Svc->>Factory: NewFormSchema(troubleType, impactLevel, answers)
+    Factory->>Common: NewFormSchema()
+    Factory->>Type: NewBaseFormSchema()
+    Factory->>Impact: NewFormSchema(impactLevel)
+    Factory->>Type: NewAnswerDependentFormSchema(answers)
+    Factory-->>Svc: FormSchema (schema)
 
     Svc->>Schema: Validate(answers)
     Schema-->>Svc: ok / ValidationError
@@ -47,7 +47,7 @@ sequenceDiagram
 
 報告書（TroubleReport）を**生成**する API です。処理は次の順で行われます。
 
-1. `composer.NewFormSchema(...)` で **その回答に応じた FormSchema** を生成する
+1. `factory.NewFormSchema(...)` で **その回答に応じた FormSchema** を生成する
 2. `schema.Validate(answers)` で **必須回答の不足が無いか** を検証する
 3. `model.NewTroubleReport(...)` で **最終的な `TroubleReport`** を構築する
 
@@ -55,7 +55,7 @@ sequenceDiagram
 
 ## エラーの出どころ（代表）
 
-- `FormSchemaComposer.NewFormSchema` 中
+- `FormSchemaFactory.NewFormSchema` 中
   - 未知の `troubleType / impactLevel`
   - 質問項目の合成で矛盾（重複質問 ID など）
 - `schema.Validate(answers)` 中
