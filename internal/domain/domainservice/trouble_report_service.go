@@ -14,17 +14,25 @@ func NewTroubleReportService(composer DefinitionComposer) TroubleReportService {
 	return TroubleReportService{composer: composer}
 }
 
-func (s TroubleReportService) Definition(draft model.TroubleReportDraft) (model.ReportDefinition, error) {
-	return s.composer.Compose(draft.TroubleType(), draft.ImpactLevel(), draft.Answers())
+func (s TroubleReportService) Definition(
+	troubleType model.TroubleType,
+	impactLevel model.ImpactLevel,
+	answers model.Answers,
+) (model.ReportDefinition, error) {
+	return s.composer.Compose(troubleType, impactLevel, answers)
 }
 
-func (s TroubleReportService) Create(draft model.TroubleReportDraft) (*model.TroubleReport, error) {
-	def, err := s.composer.Compose(draft.TroubleType(), draft.ImpactLevel(), draft.Answers())
+func (s TroubleReportService) Create(
+	troubleType model.TroubleType,
+	impactLevel model.ImpactLevel,
+	answers model.Answers,
+) (*model.TroubleReport, error) {
+	def, err := s.composer.Compose(troubleType, impactLevel, answers)
 	if err != nil {
 		return nil, err
 	}
-	if err := def.Validate(draft.Answers()); err != nil {
+	if err := def.Validate(answers); err != nil {
 		return nil, err
 	}
-	return model.NewTroubleReport(draft.TroubleType(), draft.ImpactLevel(), def, draft.Answers()), nil
+	return model.NewTroubleReport(troubleType, impactLevel, def, answers), nil
 }

@@ -15,14 +15,17 @@ func TestDefinition(t *testing.T) {
 
 	tests := []struct {
 		name         string
-		draft        model.TroubleReportDraft
+		troubleType  model.TroubleType
+		impactLevel  model.ImpactLevel
+		answers      map[model.QuestionID]string
 		wantIDs      []model.QuestionID
 		wantAbsent   []model.QuestionID
 		wantRequired []model.QuestionID
 	}{
 		{
-			name:  "共通質問が常に含まれる",
-			draft: newDraft(casetype.TroubleTypePC, casetype.ImpactLevelIndividual, nil),
+			name:        "共通質問が常に含まれる",
+			troubleType: casetype.TroubleTypePC,
+			impactLevel: casetype.ImpactLevelIndividual,
 			wantIDs: []model.QuestionID{
 				casetype.QuestionOverviewSummary,
 				casetype.QuestionSituationOccurredAt,
@@ -33,15 +36,18 @@ func TestDefinition(t *testing.T) {
 			},
 		},
 		{
-			name:    "PCの場合はpc.power_onが含まれる",
-			draft:   newDraft(casetype.TroubleTypePC, casetype.ImpactLevelIndividual, nil),
-			wantIDs: []model.QuestionID{casetype.QuestionPCPowerOn},
+			name:        "PCの場合はpc.power_onが含まれる",
+			troubleType: casetype.TroubleTypePC,
+			impactLevel: casetype.ImpactLevelIndividual,
+			wantIDs:     []model.QuestionID{casetype.QuestionPCPowerOn},
 		},
 		{
-			name: "PCでpc.power_on=noの場合は電源ランプとACアダプターの質問が追加される",
-			draft: newDraft(casetype.TroubleTypePC, casetype.ImpactLevelIndividual, map[model.QuestionID]string{
+			name:        "PCでpc.power_on=noの場合は電源ランプとACアダプターの質問が追加される",
+			troubleType: casetype.TroubleTypePC,
+			impactLevel: casetype.ImpactLevelIndividual,
+			answers: map[model.QuestionID]string{
 				casetype.QuestionPCPowerOn: valueobject.AnswerNo.String(),
-			}),
+			},
 			wantIDs: []model.QuestionID{
 				casetype.QuestionPCPowerLight,
 				casetype.QuestionPCACAdapterConnected,
@@ -49,10 +55,12 @@ func TestDefinition(t *testing.T) {
 			wantAbsent: []model.QuestionID{casetype.QuestionPCScreenVisible},
 		},
 		{
-			name: "PCでpc.power_on=yesの場合は画面表示の質問が追加される",
-			draft: newDraft(casetype.TroubleTypePC, casetype.ImpactLevelIndividual, map[model.QuestionID]string{
+			name:        "PCでpc.power_on=yesの場合は画面表示の質問が追加される",
+			troubleType: casetype.TroubleTypePC,
+			impactLevel: casetype.ImpactLevelIndividual,
+			answers: map[model.QuestionID]string{
 				casetype.QuestionPCPowerOn: valueobject.AnswerYes.String(),
-			}),
+			},
 			wantIDs: []model.QuestionID{casetype.QuestionPCScreenVisible},
 			wantAbsent: []model.QuestionID{
 				casetype.QuestionPCPowerLight,
@@ -60,8 +68,9 @@ func TestDefinition(t *testing.T) {
 			},
 		},
 		{
-			name:  "PCで電源の回答がない場合は分岐後の質問がまだ追加されない",
-			draft: newDraft(casetype.TroubleTypePC, casetype.ImpactLevelIndividual, nil),
+			name:        "PCで電源の回答がない場合は分岐後の質問がまだ追加されない",
+			troubleType: casetype.TroubleTypePC,
+			impactLevel: casetype.ImpactLevelIndividual,
 			wantAbsent: []model.QuestionID{
 				casetype.QuestionPCPowerLight,
 				casetype.QuestionPCACAdapterConnected,
@@ -69,8 +78,9 @@ func TestDefinition(t *testing.T) {
 			},
 		},
 		{
-			name:  "ネットワークの場合はネットワーク固有の質問が含まれる",
-			draft: newDraft(casetype.TroubleTypeNetwork, casetype.ImpactLevelIndividual, nil),
+			name:        "ネットワークの場合はネットワーク固有の質問が含まれる",
+			troubleType: casetype.TroubleTypeNetwork,
+			impactLevel: casetype.ImpactLevelIndividual,
 			wantIDs: []model.QuestionID{
 				casetype.QuestionNetworkConnectionType,
 				casetype.QuestionNetworkOtherUsersAffected,
@@ -78,26 +88,31 @@ func TestDefinition(t *testing.T) {
 			wantAbsent: []model.QuestionID{casetype.QuestionPCPowerOn},
 		},
 		{
-			name: "他の利用者にも影響がある場合は影響端末数の質問が追加される",
-			draft: newDraft(casetype.TroubleTypeNetwork, casetype.ImpactLevelIndividual, map[model.QuestionID]string{
+			name:        "他の利用者にも影響がある場合は影響端末数の質問が追加される",
+			troubleType: casetype.TroubleTypeNetwork,
+			impactLevel: casetype.ImpactLevelIndividual,
+			answers: map[model.QuestionID]string{
 				casetype.QuestionNetworkOtherUsersAffected: valueobject.AnswerYes.String(),
-			}),
+			},
 			wantIDs: []model.QuestionID{casetype.QuestionNetworkAffectedDeviceCount},
 		},
 		{
-			name:       "影響度が個人の場合は影響人数の質問が追加されない",
-			draft:      newDraft(casetype.TroubleTypePC, casetype.ImpactLevelIndividual, nil),
-			wantAbsent: []model.QuestionID{casetype.QuestionImpactAffectedPeople, casetype.QuestionImpactWorkaround},
+			name:        "影響度が個人の場合は影響人数の質問が追加されない",
+			troubleType: casetype.TroubleTypePC,
+			impactLevel: casetype.ImpactLevelIndividual,
+			wantAbsent:  []model.QuestionID{casetype.QuestionImpactAffectedPeople, casetype.QuestionImpactWorkaround},
 		},
 		{
-			name:       "影響度がチームの場合は影響人数の質問が追加される",
-			draft:      newDraft(casetype.TroubleTypePC, casetype.ImpactLevelTeam, nil),
-			wantIDs:    []model.QuestionID{casetype.QuestionImpactAffectedPeople},
-			wantAbsent: []model.QuestionID{casetype.QuestionImpactWorkaround},
+			name:        "影響度がチームの場合は影響人数の質問が追加される",
+			troubleType: casetype.TroubleTypePC,
+			impactLevel: casetype.ImpactLevelTeam,
+			wantIDs:     []model.QuestionID{casetype.QuestionImpactAffectedPeople},
+			wantAbsent:  []model.QuestionID{casetype.QuestionImpactWorkaround},
 		},
 		{
-			name:  "影響度が全社の場合は代替手段と希望対応が必須になる",
-			draft: newDraft(casetype.TroubleTypePC, casetype.ImpactLevelCompanyWide, nil),
+			name:        "影響度が全社の場合は代替手段と希望対応が必須になる",
+			troubleType: casetype.TroubleTypePC,
+			impactLevel: casetype.ImpactLevelCompanyWide,
 			wantIDs: []model.QuestionID{
 				casetype.QuestionImpactAffectedPeople,
 				casetype.QuestionImpactWorkaround,
@@ -112,7 +127,7 @@ func TestDefinition(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			def, err := service.Definition(tt.draft)
+			def, err := service.Definition(tt.troubleType, tt.impactLevel, answersOf(tt.answers))
 			if err != nil {
 				t.Fatalf("Definition() error = %v", err)
 			}
@@ -127,7 +142,7 @@ func TestDefinitionUnknownValues(t *testing.T) {
 	service := NewTroubleReportService(NewDefinitionComposer())
 
 	t.Run("未知のトラブル種類はエラーになる", func(t *testing.T) {
-		_, err := service.Definition(newDraft(model.TroubleType{}, casetype.ImpactLevelIndividual, nil))
+		_, err := service.Definition(model.TroubleType{}, casetype.ImpactLevelIndividual, answersOf(nil))
 		var unknown *casetype.UnknownTroubleTypeError
 		if !errors.As(err, &unknown) {
 			t.Fatalf("Definition() error = %v, want UnknownTroubleTypeError", err)
@@ -135,7 +150,7 @@ func TestDefinitionUnknownValues(t *testing.T) {
 	})
 
 	t.Run("未知の影響度はエラーになる", func(t *testing.T) {
-		_, err := service.Definition(newDraft(casetype.TroubleTypePC, model.ImpactLevel{}, nil))
+		_, err := service.Definition(casetype.TroubleTypePC, model.ImpactLevel{}, answersOf(nil))
 		var unknown *casetype.UnknownImpactLevelError
 		if !errors.As(err, &unknown) {
 			t.Fatalf("Definition() error = %v, want UnknownImpactLevelError", err)
@@ -166,7 +181,7 @@ func TestCreate(t *testing.T) {
 	service := NewTroubleReportService(NewDefinitionComposer())
 
 	t.Run("必須回答がすべて揃っていればTroubleReportを生成できる", func(t *testing.T) {
-		report, err := service.Create(newDraft(casetype.TroubleTypePC, casetype.ImpactLevelTeam, validPCTeamPowerOffAnswers()))
+		report, err := service.Create(casetype.TroubleTypePC, casetype.ImpactLevelTeam, answersOf(validPCTeamPowerOffAnswers()))
 		if err != nil {
 			t.Fatalf("Create() error = %v", err)
 		}
@@ -179,7 +194,7 @@ func TestCreate(t *testing.T) {
 		answers := validPCTeamPowerOffAnswers()
 		delete(answers, casetype.QuestionOverviewSummary)
 
-		_, err := service.Create(newDraft(casetype.TroubleTypePC, casetype.ImpactLevelTeam, answers))
+		_, err := service.Create(casetype.TroubleTypePC, casetype.ImpactLevelTeam, answersOf(answers))
 		if err == nil {
 			t.Fatal("Create() error = nil, want validation error")
 		}
@@ -190,7 +205,7 @@ func TestCreate(t *testing.T) {
 		delete(answers, casetype.QuestionSituationOccurredAt)
 		delete(answers, casetype.QuestionImpactAffectedPeople)
 
-		_, err := service.Create(newDraft(casetype.TroubleTypePC, casetype.ImpactLevelTeam, answers))
+		_, err := service.Create(casetype.TroubleTypePC, casetype.ImpactLevelTeam, answersOf(answers))
 		var verr *model.ValidationError
 		if !errors.As(err, &verr) {
 			t.Fatalf("Create() error = %v, want ValidationError", err)
@@ -208,7 +223,7 @@ func TestCreate(t *testing.T) {
 		answers := validPCTeamPowerOffAnswers()
 		delete(answers, casetype.QuestionPCPowerLight)
 
-		_, err := service.Create(newDraft(casetype.TroubleTypePC, casetype.ImpactLevelTeam, answers))
+		_, err := service.Create(casetype.TroubleTypePC, casetype.ImpactLevelTeam, answersOf(answers))
 		assertMissing(t, err, casetype.QuestionPCPowerLight)
 	})
 
@@ -216,7 +231,7 @@ func TestCreate(t *testing.T) {
 		answers := validNetworkIndividualAnswers()
 		answers[casetype.QuestionNetworkOtherUsersAffected] = valueobject.AnswerYes.String()
 
-		_, err := service.Create(newDraft(casetype.TroubleTypeNetwork, casetype.ImpactLevelIndividual, answers))
+		_, err := service.Create(casetype.TroubleTypeNetwork, casetype.ImpactLevelIndividual, answersOf(answers))
 		assertMissing(t, err, casetype.QuestionNetworkAffectedDeviceCount)
 	})
 
@@ -224,21 +239,21 @@ func TestCreate(t *testing.T) {
 		answers := validPCTeamPowerOffAnswers()
 		delete(answers, casetype.QuestionImpactAffectedPeople)
 
-		_, err := service.Create(newDraft(casetype.TroubleTypePC, casetype.ImpactLevelTeam, answers))
+		_, err := service.Create(casetype.TroubleTypePC, casetype.ImpactLevelTeam, answersOf(answers))
 		assertMissing(t, err, casetype.QuestionImpactAffectedPeople)
 
 		answers = validPCCompanyWidePowerOffAnswers()
 		delete(answers, casetype.QuestionRecommendationRequestedAction)
 		delete(answers, casetype.QuestionImpactWorkaround)
 
-		_, err = service.Create(newDraft(casetype.TroubleTypePC, casetype.ImpactLevelCompanyWide, answers))
+		_, err = service.Create(casetype.TroubleTypePC, casetype.ImpactLevelCompanyWide, answersOf(answers))
 		assertMissing(t, err, casetype.QuestionRecommendationRequestedAction)
 		assertMissing(t, err, casetype.QuestionImpactWorkaround)
 	})
 
 	t.Run("生成された報告書がOverview、SBAR、Otherに回答を正しく保持する", func(t *testing.T) {
 		answers := validPCTeamPowerOffAnswers()
-		report, err := service.Create(newDraft(casetype.TroubleTypePC, casetype.ImpactLevelTeam, answers))
+		report, err := service.Create(casetype.TroubleTypePC, casetype.ImpactLevelTeam, answersOf(answers))
 		if err != nil {
 			t.Fatalf("Create() error = %v", err)
 		}
@@ -272,13 +287,8 @@ func TestCreate(t *testing.T) {
 		if err != nil {
 			t.Fatalf("NewAnswersFromStrings() error = %v", err)
 		}
-		draft := model.NewTroubleReportDraft(
-			casetype.TroubleTypePC,
-			casetype.ImpactLevelTeam,
-			answers,
-		)
 
-		report, err := service.Create(draft)
+		report, err := service.Create(casetype.TroubleTypePC, casetype.ImpactLevelTeam, answers)
 		if err != nil {
 			t.Fatalf("Create() error = %v", err)
 		}
@@ -301,8 +311,8 @@ func TestCreate(t *testing.T) {
 	})
 }
 
-func newDraft(troubleType model.TroubleType, impactLevel model.ImpactLevel, answers map[model.QuestionID]string) model.TroubleReportDraft {
-	return model.NewTroubleReportDraft(troubleType, impactLevel, model.NewAnswersFromText(answers))
+func answersOf(raw map[model.QuestionID]string) model.Answers {
+	return model.NewAnswersFromText(raw)
 }
 
 func validPCTeamPowerOffAnswers() map[model.QuestionID]string {

@@ -108,7 +108,6 @@ flowchart TB
 
   subgraph md["model  汎用の報告書構造"]
     report[TroubleReport]
-    draft[TroubleReportDraft]
     def[ReportDefinition]
     qdef[QuestionDefinition]
     answers[Answers]
@@ -126,7 +125,9 @@ flowchart TB
 
   svc --> composer
   svc --> report
-  svc --> draft
+  svc --> answers
+  svc --> tt
+  svc --> il
   composer --> common
   composer --> pc
   composer --> net
@@ -137,15 +138,12 @@ flowchart TB
   impact --> def
   pc --> answers
   net --> answers
-  draft --> answers
   def --> qdef
   qdef --> qid
   qdef --> section
   qdef --> prompt
   report --> tt
   report --> il
-  draft --> tt
-  draft --> il
   tt --> id
   il --> id
   qid --> id
@@ -222,7 +220,6 @@ flowchart TB
 │       │   ├── report_definition.go
 │       │   ├── section_content.go     AnswerItem / SBAR
 │       │   ├── trouble_report.go
-│       │   ├── trouble_report_draft.go
 │       │   └── validation_error.go
 │       ├── casetype/
 │       │   ├── trouble_type.go        pc / network
@@ -250,13 +247,13 @@ flowchart TB
 
 ```text
 Request DTO
-    ↓ application が Parse して変換
-TroubleReportDraft     入力途中。未回答や未分岐でもよい
+    ↓ application が Parse する
+TroubleType, ImpactLevel, Answers
     ↓ TroubleReportService.Create
 TroubleReport          Validation を通過した完成形
 ```
 
-`TroubleReportDraft` は途中状態です。必須回答が足りていても、まだ分岐先に答えていなくても構いません。`TroubleReport` は完成形です。通過した回答だけが Overview / SBAR / Other に入ります。
+application は文字列をドメインの型へ翻訳し、`Create(troubleType, impactLevel, answers)` を呼びます。必須が足りない入力でも型としては渡せます。提出可能かどうかは Domain Service が判定します。通過した回答だけが Overview / SBAR / Other に入ります。
 
 Go には「兄弟パッケージだけに公開する」仕組みがありません。`model.NewTroubleReport` は `domainservice` から呼べるよう公開していますが、アプリケーション層からは直接呼ばない、というルールにしています。
 
@@ -475,15 +472,19 @@ func (c DefinitionComposer) Compose(
 
 ```go
 // internal/domain/domainservice/trouble_report_service.go
-func (s TroubleReportService) Create(draft model.TroubleReportDraft) (*model.TroubleReport, error) {
-	def, err := s.composer.Compose(draft.TroubleType(), draft.ImpactLevel(), draft.Answers())
+func (s TroubleReportService) Create(
+	troubleType model.TroubleType,
+	impactLevel model.ImpactLevel,
+	answers model.Answers,
+) (*model.TroubleReport, error) {
+	def, err := s.composer.Compose(troubleType, impactLevel, answers)
 	if err != nil {
 		return nil, err
 	}
-	if err := def.Validate(draft.Answers()); err != nil {
+	if err := def.Validate(answers); err != nil {
 		return nil, err
 	}
-	return model.NewTroubleReport(draft.TroubleType(), draft.ImpactLevel(), def, draft.Answers()), nil
+	return model.NewTroubleReport(troubleType, impactLevel, def, answers), nil
 }
 ```
 
@@ -491,20 +492,20 @@ func (s TroubleReportService) Create(draft model.TroubleReportDraft) (*model.Tro
 
 ```go
 // internal/application/create_trouble_report.go
-func ToDraft(req CreateTroubleReportRequest) (model.TroubleReportDraft, error) {
+func (u CreateTroubleReportUseCase) Execute(req CreateTroubleReportRequest) (*model.TroubleReport, error) {
 	troubleType, err := casetype.ParseTroubleType(req.TroubleType)
 	if err != nil {
-		return model.TroubleReportDraft{}, err
+		return nil, err
 	}
 	impactLevel, err := casetype.ParseImpactLevel(req.ImpactLevel)
 	if err != nil {
-		return model.TroubleReportDraft{}, err
+		return nil, err
 	}
 	answers, err := model.NewAnswersFromStrings(req.Answers)
 	if err != nil {
-		return model.TroubleReportDraft{}, err
+		return nil, err
 	}
-	return model.NewTroubleReportDraft(troubleType, impactLevel, answers), nil
+	return u.service.Create(troubleType, impactLevel, answers)
 }
 ```
 
