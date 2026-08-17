@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	service := domainservice.NewTroubleReportService(domainservice.NewDefinitionComposer())
+	service := domainservice.NewTroubleReportService(domainservice.NewFormSchemaComposer())
 	usecase := application.NewCreateTroubleReportUseCase(service)
 
 	report, err := usecase.Execute(application.CreateTroubleReportRequest{

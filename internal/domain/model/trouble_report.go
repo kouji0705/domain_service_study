@@ -12,11 +12,20 @@ type TroubleReport struct {
 	other       SectionAnswers
 }
 
+// TroubleType はトラブル種類を返す。
 func (r *TroubleReport) TroubleType() TroubleType { return r.troubleType }
+
+// ImpactLevel は影響度を返す。
 func (r *TroubleReport) ImpactLevel() ImpactLevel { return r.impactLevel }
+
+// Overview は概要セクションの回答を返す。
 func (r *TroubleReport) Overview() SectionAnswers { return r.overview.Clone() }
-func (r *TroubleReport) SBAR() SBAR               { return r.sbar.Clone() }
-func (r *TroubleReport) Other() SectionAnswers    { return r.other.Clone() }
+
+// SBAR は Situation / Background / Assessment / Recommendation を返す。
+func (r *TroubleReport) SBAR() SBAR { return r.sbar.Clone() }
+
+// Other はその他セクションの回答を返す。
+func (r *TroubleReport) Other() SectionAnswers { return r.other.Clone() }
 
 // NewTroubleReport は定義と回答から報告書を組み立てる。
 //
@@ -25,7 +34,7 @@ func (r *TroubleReport) Other() SectionAnswers    { return r.other.Clone() }
 func NewTroubleReport(
 	troubleType TroubleType,
 	impactLevel ImpactLevel,
-	def ReportDefinition,
+	def FormSchema,
 	answers Answers,
 ) *TroubleReport {
 	overview := make([]AnswerItem, 0)

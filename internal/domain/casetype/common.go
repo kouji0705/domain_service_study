@@ -8,8 +8,9 @@ import (
 // CommonModule はすべての報告書に共通する質問とルールを返す。
 type CommonModule struct{}
 
-func (CommonModule) Definition() model.ReportDefinition {
-	return mustDefinition(
+// NewFormSchema はすべての報告書に共通する質問項目定義を生成する。
+func (CommonModule) NewFormSchema() model.FormSchema {
+	return mustFormSchema(
 		model.NewQuestionDefinition(
 			QuestionOverviewSummary,
 			valueobject.SectionOverview,

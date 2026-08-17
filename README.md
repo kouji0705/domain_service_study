@@ -48,11 +48,11 @@ classDiagram
     Prompt
     required
   }
-  class ReportDefinition {
+  class FormSchema {
     QuestionDefinition[]
   }
 
-  ReportDefinition *-- QuestionDefinition
+  FormSchema *-- QuestionDefinition
   QuestionDefinition *-- QuestionID
   QuestionDefinition *-- Section
   QuestionDefinition *-- Prompt
@@ -96,7 +96,7 @@ report : TroubleReport
 flowchart TB
   subgraph ds["domainservice"]
     svc[TroubleReportService]
-    composer[DefinitionComposer]
+    composer[FormSchemaComposer]
   end
 
   subgraph ct["casetype  この事例の知識"]
@@ -108,7 +108,7 @@ flowchart TB
 
   subgraph md["model  汎用の報告書構造"]
     report[TroubleReport]
-    def[ReportDefinition]
+    def[FormSchema]
     qdef[QuestionDefinition]
     answers[Answers]
     tt[TroubleType]
@@ -259,7 +259,7 @@ Go には「兄弟パッケージだけに公開する」仕組みがありま�
 
 ## 質問はどう決まるか
 
-`DefinitionComposer` は、次の順で `ReportDefinition` を合成します。
+`FormSchemaComposer` は、次の順で `FormSchema` を合成します。
 
 1. 共通定義（概要、発生時刻、希望対応など）
 2. トラブル種類の基本定義（PC なら電源、ネットワークなら接続種別）
@@ -271,7 +271,7 @@ flowchart LR
   common[共通] --> type[種類]
   type --> impact[影響度]
   impact --> branch[回答依存]
-  branch --> def[ReportDefinition]
+  branch --> def[FormSchema]
   def --> validate[Validate]
   validate --> report[TroubleReport]
 ```
@@ -391,15 +391,15 @@ PC の分岐は `PCModule` です。電源の回答がまだなければ、先�
 
 ```go
 // internal/domain/casetype/pc.go
-func (PCModule) AnswerDependentDefinition(answers model.Answers) model.ReportDefinition {
+func (PCModule) NewAnswerDependentFormSchema(answers model.Answers) model.FormSchema {
 	value, ok := answers.Get(QuestionPCPowerOn)
 	if !ok || value.IsBlank() {
-		return model.ReportDefinition{}
+		return model.FormSchema{}
 	}
 
 	switch {
 	case value.IsNo():
-		return mustDefinition(
+		return mustFormSchema(
 			model.NewQuestionDefinition(
 				QuestionPCPowerLight,
 				valueobject.SectionAssessment,
@@ -414,7 +414,7 @@ func (PCModule) AnswerDependentDefinition(answers model.Answers) model.ReportDef
 			),
 		)
 	case value.IsYes():
-		return mustDefinition(
+		return mustFormSchema(
 			model.NewQuestionDefinition(
 				QuestionPCScreenVisible,
 				valueobject.SectionSituation,
@@ -423,46 +423,46 @@ func (PCModule) AnswerDependentDefinition(answers model.Answers) model.ReportDef
 			),
 		)
 	default:
-		return model.ReportDefinition{}
+		return model.FormSchema{}
 	}
 }
 ```
 
 ### 合成: Composer はモジュールを足すだけ
 
-`DefinitionComposer` は質問文を知りません。共通 → 種類 → 影響度 → 回答依存の順で `Combine` します。
+`FormSchemaComposer` は質問文を知りません。共通 → 種類 → 影響度 → 回答依存の順で `Combine` します。
 
 ```go
 // internal/domain/domainservice/definition_composer.go
-func (c DefinitionComposer) Compose(
+func (c FormSchemaComposer) Compose(
 	troubleType model.TroubleType,
 	impactLevel model.ImpactLevel,
 	answers model.Answers,
-) (model.ReportDefinition, error) {
+) (model.FormSchema, error) {
 	if !casetype.IsKnownTroubleType(troubleType) {
-		return model.ReportDefinition{}, &casetype.UnknownTroubleTypeError{Value: troubleType.String()}
+		return model.FormSchema{}, &casetype.UnknownTroubleTypeError{Value: troubleType.String()}
 	}
 	if !casetype.IsKnownImpactLevel(impactLevel) {
-		return model.ReportDefinition{}, &casetype.UnknownImpactLevelError{Value: impactLevel.String()}
+		return model.FormSchema{}, &casetype.UnknownImpactLevelError{Value: impactLevel.String()}
 	}
 
 	typeModule, err := c.typeModule(troubleType)
 	if err != nil {
-		return model.ReportDefinition{}, err
+		return model.FormSchema{}, err
 	}
 
-	def := c.common.Definition()
-	def, err = def.Combine(typeModule.BaseDefinition())
+	def := c.common.NewFormSchema()
+	def, err = def.Combine(typeModule.NewBaseFormSchema())
 	if err != nil {
-		return model.ReportDefinition{}, err
+		return model.FormSchema{}, err
 	}
-	def, err = def.Combine(c.impact.Definition(impactLevel))
+	def, err = def.Combine(c.impact.NewFormSchema(impactLevel))
 	if err != nil {
-		return model.ReportDefinition{}, err
+		return model.FormSchema{}, err
 	}
-	def, err = def.Combine(typeModule.AnswerDependentDefinition(answers))
+	def, err = def.Combine(typeModule.NewAnswerDependentFormSchema(answers))
 	if err != nil {
-		return model.ReportDefinition{}, err
+		return model.FormSchema{}, err
 	}
 	return c.impact.ApplyRequiredOverrides(def, impactLevel)
 }
@@ -477,7 +477,7 @@ func (s TroubleReportService) Create(
 	impactLevel model.ImpactLevel,
 	answers model.Answers,
 ) (*model.TroubleReport, error) {
-	def, err := s.composer.Compose(troubleType, impactLevel, answers)
+	def, err := s.composer.NewFormSchema(troubleType, impactLevel, answers)
 	if err != nil {
 		return nil, err
 	}
@@ -505,7 +505,7 @@ func (u CreateTroubleReportUseCase) Execute(req CreateTroubleReportRequest) (*mo
 	if err != nil {
 		return nil, err
 	}
-	return u.service.Create(troubleType, impactLevel, answers)
+	return u.service.NewTroubleReport(troubleType, impactLevel, answers)
 }
 ```
 
@@ -513,7 +513,7 @@ func (u CreateTroubleReportUseCase) Execute(req CreateTroubleReportRequest) (*mo
 
 ```go
 // cmd/main.go
-service := domainservice.NewTroubleReportService(domainservice.NewDefinitionComposer())
+service := domainservice.NewTroubleReportService(domainservice.NewFormSchemaComposer())
 usecase := application.NewCreateTroubleReportUseCase(service)
 
 report, err := usecase.Execute(application.CreateTroubleReportRequest{

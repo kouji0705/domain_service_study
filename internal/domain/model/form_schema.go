@@ -2,6 +2,7 @@ package model
 
 import "fmt"
 
+// DuplicateQuestionIDError は質問 ID が重複した FormSchema を作ろうとしたときに返す。
 type DuplicateQuestionIDError struct {
 	ID QuestionID
 }
@@ -10,6 +11,7 @@ func (e *DuplicateQuestionIDError) Error() string {
 	return fmt.Sprintf("duplicate question id: %s", e.ID)
 }
 
+// QuestionNotFoundError は存在しない質問 ID を参照したときに返す。
 type QuestionNotFoundError struct {
 	ID QuestionID
 }
@@ -18,36 +20,41 @@ func (e *QuestionNotFoundError) Error() string {
 	return fmt.Sprintf("question not found: %s", e.ID)
 }
 
-// ReportDefinition は今回表示する質問と Validation ルールの集合。
-type ReportDefinition struct {
+// FormSchema は今回表示する質問項目と Validation ルールの集合。
+type FormSchema struct {
 	questions []QuestionDefinition
 }
 
-func NewReportDefinition(questions ...QuestionDefinition) (ReportDefinition, error) {
+// NewFormSchema は質問項目の定義から FormSchema を生成する。
+// 質問 ID が重複している場合は DuplicateQuestionIDError を返す。
+func NewFormSchema(questions ...QuestionDefinition) (FormSchema, error) {
 	seen := make(map[QuestionID]struct{}, len(questions))
 	copied := make([]QuestionDefinition, 0, len(questions))
 	for _, question := range questions {
 		if _, exists := seen[question.id]; exists {
-			return ReportDefinition{}, &DuplicateQuestionIDError{ID: question.id}
+			return FormSchema{}, &DuplicateQuestionIDError{ID: question.id}
 		}
 		seen[question.id] = struct{}{}
 		copied = append(copied, question)
 	}
-	return ReportDefinition{questions: copied}, nil
+	return FormSchema{questions: copied}, nil
 }
 
-func (d ReportDefinition) Questions() []QuestionDefinition {
+// Questions は含まれる質問定義のコピーを返す。
+func (d FormSchema) Questions() []QuestionDefinition {
 	copied := make([]QuestionDefinition, len(d.questions))
 	copy(copied, d.questions)
 	return copied
 }
 
-func (d ReportDefinition) Contains(id QuestionID) bool {
+// Contains は指定した質問 ID が定義に含まれるかどうかを返す。
+func (d FormSchema) Contains(id QuestionID) bool {
 	_, ok := d.Question(id)
 	return ok
 }
 
-func (d ReportDefinition) Question(id QuestionID) (QuestionDefinition, bool) {
+// Question は指定した質問 ID の定義を返す。存在しない場合は false を返す。
+func (d FormSchema) Question(id QuestionID) (QuestionDefinition, bool) {
 	for _, question := range d.questions {
 		if question.id == id {
 			return question, true
@@ -56,18 +63,18 @@ func (d ReportDefinition) Question(id QuestionID) (QuestionDefinition, bool) {
 	return QuestionDefinition{}, false
 }
 
-// Combine は元の定義を変更せず、新しい ReportDefinition を返す。
+// Combine は元の定義を変更せず、新しい FormSchema を返す。
 // 質問IDが重複した場合は黙って上書きせず、エラーにする。
-func (d ReportDefinition) Combine(other ReportDefinition) (ReportDefinition, error) {
+func (d FormSchema) Combine(other FormSchema) (FormSchema, error) {
 	questions := make([]QuestionDefinition, 0, len(d.questions)+len(other.questions))
 	questions = append(questions, d.questions...)
 	questions = append(questions, other.questions...)
-	return NewReportDefinition(questions...)
+	return NewFormSchema(questions...)
 }
 
 // OverrideRequired は既存質問の必須条件を上書きする。
 // 同じ質問IDを重複追加する代わりに、合成後の必須条件を変えられるようにする。
-func (d ReportDefinition) OverrideRequired(id QuestionID, required bool) (ReportDefinition, error) {
+func (d FormSchema) OverrideRequired(id QuestionID, required bool) (FormSchema, error) {
 	questions := make([]QuestionDefinition, len(d.questions))
 	copy(questions, d.questions)
 
@@ -80,12 +87,14 @@ func (d ReportDefinition) OverrideRequired(id QuestionID, required bool) (Report
 		}
 	}
 	if !found {
-		return ReportDefinition{}, &QuestionNotFoundError{ID: id}
+		return FormSchema{}, &QuestionNotFoundError{ID: id}
 	}
-	return ReportDefinition{questions: questions}, nil
+	return FormSchema{questions: questions}, nil
 }
 
-func (d ReportDefinition) Validate(answers Answers) error {
+// Validate は必須質問に対する回答が揃っているか検証する。
+// 不足がある場合は ValidationError を返す。
+func (d FormSchema) Validate(answers Answers) error {
 	issues := make([]ValidationIssue, 0)
 	for _, question := range d.questions {
 		if !question.required {

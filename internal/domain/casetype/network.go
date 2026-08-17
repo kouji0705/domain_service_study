@@ -8,8 +8,9 @@ import (
 // NetworkModule はネットワークトラブル固有の質問と、回答に依存する分岐質問を返す。
 type NetworkModule struct{}
 
-func (NetworkModule) BaseDefinition() model.ReportDefinition {
-	return mustDefinition(
+// NewBaseFormSchema はネットワークトラブル固有の基本質問項目定義を生成する。
+func (NetworkModule) NewBaseFormSchema() model.FormSchema {
+	return mustFormSchema(
 		model.NewQuestionDefinition(
 			QuestionNetworkConnectionType,
 			valueobject.SectionBackground,
@@ -25,16 +26,18 @@ func (NetworkModule) BaseDefinition() model.ReportDefinition {
 	)
 }
 
-func (NetworkModule) AnswerDependentDefinition(answers model.Answers) model.ReportDefinition {
+// NewAnswerDependentFormSchema は回答内容に応じた分岐質問項目定義を生成する。
+// 前提となる回答が未入力または分岐条件を満たさない場合は空の定義を返す。
+func (NetworkModule) NewAnswerDependentFormSchema(answers model.Answers) model.FormSchema {
 	value, ok := answers.Get(QuestionNetworkOtherUsersAffected)
 	if !ok || value.IsBlank() {
-		return model.ReportDefinition{}
+		return model.FormSchema{}
 	}
 	if !value.IsYes() {
-		return model.ReportDefinition{}
+		return model.FormSchema{}
 	}
 
-	return mustDefinition(
+	return mustFormSchema(
 		model.NewQuestionDefinition(
 			QuestionNetworkAffectedDeviceCount,
 			valueobject.SectionOverview,

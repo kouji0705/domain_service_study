@@ -8,8 +8,9 @@ import (
 // PCModule はPCトラブル固有の質問と、回答に依存する分岐質問を返す。
 type PCModule struct{}
 
-func (PCModule) BaseDefinition() model.ReportDefinition {
-	return mustDefinition(
+// NewBaseFormSchema は PC トラブル固有の基本質問項目定義を生成する。
+func (PCModule) NewBaseFormSchema() model.FormSchema {
+	return mustFormSchema(
 		model.NewQuestionDefinition(
 			QuestionPCPowerOn,
 			valueobject.SectionSituation,
@@ -19,15 +20,17 @@ func (PCModule) BaseDefinition() model.ReportDefinition {
 	)
 }
 
-func (PCModule) AnswerDependentDefinition(answers model.Answers) model.ReportDefinition {
+// NewAnswerDependentFormSchema は回答内容に応じた分岐質問項目定義を生成する。
+// 前提となる回答が未入力または分岐条件を満たさない場合は空の定義を返す。
+func (PCModule) NewAnswerDependentFormSchema(answers model.Answers) model.FormSchema {
 	value, ok := answers.Get(QuestionPCPowerOn)
 	if !ok || value.IsBlank() {
-		return model.ReportDefinition{}
+		return model.FormSchema{}
 	}
 
 	switch {
 	case value.IsNo():
-		return mustDefinition(
+		return mustFormSchema(
 			model.NewQuestionDefinition(
 				QuestionPCPowerLight,
 				valueobject.SectionAssessment,
@@ -42,7 +45,7 @@ func (PCModule) AnswerDependentDefinition(answers model.Answers) model.ReportDef
 			),
 		)
 	case value.IsYes():
-		return mustDefinition(
+		return mustFormSchema(
 			model.NewQuestionDefinition(
 				QuestionPCScreenVisible,
 				valueobject.SectionSituation,
@@ -51,6 +54,6 @@ func (PCModule) AnswerDependentDefinition(answers model.Answers) model.ReportDef
 			),
 		)
 	default:
-		return model.ReportDefinition{}
+		return model.FormSchema{}
 	}
 }

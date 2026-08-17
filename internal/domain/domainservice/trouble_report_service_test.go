@@ -10,8 +10,8 @@ import (
 	"domain_service_study/internal/domain/valueobject"
 )
 
-func TestDefinition(t *testing.T) {
-	service := NewTroubleReportService(NewDefinitionComposer())
+func TestNewFormSchema(t *testing.T) {
+	service := NewTroubleReportService(NewFormSchemaComposer())
 
 	tests := []struct {
 		name         string
@@ -127,44 +127,44 @@ func TestDefinition(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			def, err := service.Definition(tt.troubleType, tt.impactLevel, answersOf(tt.answers))
+			schema, err := service.NewFormSchema(tt.troubleType, tt.impactLevel, answersOf(tt.answers))
 			if err != nil {
-				t.Fatalf("Definition() error = %v", err)
+				t.Fatalf("NewFormSchema() error = %v", err)
 			}
-			assertContains(t, def, tt.wantIDs...)
-			assertAbsent(t, def, tt.wantAbsent...)
-			assertRequired(t, def, tt.wantRequired...)
+			assertContains(t, schema, tt.wantIDs...)
+			assertAbsent(t, schema, tt.wantAbsent...)
+			assertRequired(t, schema, tt.wantRequired...)
 		})
 	}
 }
 
-func TestDefinitionUnknownValues(t *testing.T) {
-	service := NewTroubleReportService(NewDefinitionComposer())
+func TestNewFormSchemaUnknownValues(t *testing.T) {
+	service := NewTroubleReportService(NewFormSchemaComposer())
 
 	t.Run("未知のトラブル種類はエラーになる", func(t *testing.T) {
-		_, err := service.Definition(model.TroubleType{}, casetype.ImpactLevelIndividual, answersOf(nil))
+		_, err := service.NewFormSchema(model.TroubleType{}, casetype.ImpactLevelIndividual, answersOf(nil))
 		var unknown *casetype.UnknownTroubleTypeError
 		if !errors.As(err, &unknown) {
-			t.Fatalf("Definition() error = %v, want UnknownTroubleTypeError", err)
+			t.Fatalf("NewFormSchema() error = %v, want UnknownTroubleTypeError", err)
 		}
 	})
 
 	t.Run("未知の影響度はエラーになる", func(t *testing.T) {
-		_, err := service.Definition(casetype.TroubleTypePC, model.ImpactLevel{}, answersOf(nil))
+		_, err := service.NewFormSchema(casetype.TroubleTypePC, model.ImpactLevel{}, answersOf(nil))
 		var unknown *casetype.UnknownImpactLevelError
 		if !errors.As(err, &unknown) {
-			t.Fatalf("Definition() error = %v, want UnknownImpactLevelError", err)
+			t.Fatalf("NewFormSchema() error = %v, want UnknownImpactLevelError", err)
 		}
 	})
 }
 
-func TestDefinitionDuplicateQuestionID(t *testing.T) {
-	common := casetype.CommonModule{}.Definition()
-	duplicated, err := model.NewReportDefinition(
+func TestNewFormSchemaDuplicateQuestionID(t *testing.T) {
+	common := casetype.CommonModule{}.NewFormSchema()
+	duplicated, err := model.NewFormSchema(
 		model.NewQuestionDefinition(casetype.QuestionOverviewSummary, valueobject.SectionOverview, valueobject.MustPrompt("重複"), true),
 	)
 	if err != nil {
-		t.Fatalf("NewReportDefinition() error = %v", err)
+		t.Fatalf("NewNewFormSchema() error = %v", err)
 	}
 
 	_, err = common.Combine(duplicated)
@@ -177,11 +177,11 @@ func TestDefinitionDuplicateQuestionID(t *testing.T) {
 	}
 }
 
-func TestCreate(t *testing.T) {
-	service := NewTroubleReportService(NewDefinitionComposer())
+func TestNewTroubleReport(t *testing.T) {
+	service := NewTroubleReportService(NewFormSchemaComposer())
 
 	t.Run("必須回答がすべて揃っていればTroubleReportを生成できる", func(t *testing.T) {
-		report, err := service.Create(casetype.TroubleTypePC, casetype.ImpactLevelTeam, answersOf(validPCTeamPowerOffAnswers()))
+		report, err := service.NewTroubleReport(casetype.TroubleTypePC, casetype.ImpactLevelTeam, answersOf(validPCTeamPowerOffAnswers()))
 		if err != nil {
 			t.Fatalf("Create() error = %v", err)
 		}
@@ -194,7 +194,7 @@ func TestCreate(t *testing.T) {
 		answers := validPCTeamPowerOffAnswers()
 		delete(answers, casetype.QuestionOverviewSummary)
 
-		_, err := service.Create(casetype.TroubleTypePC, casetype.ImpactLevelTeam, answersOf(answers))
+		_, err := service.NewTroubleReport(casetype.TroubleTypePC, casetype.ImpactLevelTeam, answersOf(answers))
 		if err == nil {
 			t.Fatal("Create() error = nil, want validation error")
 		}
@@ -205,7 +205,7 @@ func TestCreate(t *testing.T) {
 		delete(answers, casetype.QuestionSituationOccurredAt)
 		delete(answers, casetype.QuestionImpactAffectedPeople)
 
-		_, err := service.Create(casetype.TroubleTypePC, casetype.ImpactLevelTeam, answersOf(answers))
+		_, err := service.NewTroubleReport(casetype.TroubleTypePC, casetype.ImpactLevelTeam, answersOf(answers))
 		var verr *model.ValidationError
 		if !errors.As(err, &verr) {
 			t.Fatalf("Create() error = %v, want ValidationError", err)
@@ -223,7 +223,7 @@ func TestCreate(t *testing.T) {
 		answers := validPCTeamPowerOffAnswers()
 		delete(answers, casetype.QuestionPCPowerLight)
 
-		_, err := service.Create(casetype.TroubleTypePC, casetype.ImpactLevelTeam, answersOf(answers))
+		_, err := service.NewTroubleReport(casetype.TroubleTypePC, casetype.ImpactLevelTeam, answersOf(answers))
 		assertMissing(t, err, casetype.QuestionPCPowerLight)
 	})
 
@@ -231,7 +231,7 @@ func TestCreate(t *testing.T) {
 		answers := validNetworkIndividualAnswers()
 		answers[casetype.QuestionNetworkOtherUsersAffected] = valueobject.AnswerYes.String()
 
-		_, err := service.Create(casetype.TroubleTypeNetwork, casetype.ImpactLevelIndividual, answersOf(answers))
+		_, err := service.NewTroubleReport(casetype.TroubleTypeNetwork, casetype.ImpactLevelIndividual, answersOf(answers))
 		assertMissing(t, err, casetype.QuestionNetworkAffectedDeviceCount)
 	})
 
@@ -239,21 +239,21 @@ func TestCreate(t *testing.T) {
 		answers := validPCTeamPowerOffAnswers()
 		delete(answers, casetype.QuestionImpactAffectedPeople)
 
-		_, err := service.Create(casetype.TroubleTypePC, casetype.ImpactLevelTeam, answersOf(answers))
+		_, err := service.NewTroubleReport(casetype.TroubleTypePC, casetype.ImpactLevelTeam, answersOf(answers))
 		assertMissing(t, err, casetype.QuestionImpactAffectedPeople)
 
 		answers = validPCCompanyWidePowerOffAnswers()
 		delete(answers, casetype.QuestionRecommendationRequestedAction)
 		delete(answers, casetype.QuestionImpactWorkaround)
 
-		_, err = service.Create(casetype.TroubleTypePC, casetype.ImpactLevelCompanyWide, answersOf(answers))
+		_, err = service.NewTroubleReport(casetype.TroubleTypePC, casetype.ImpactLevelCompanyWide, answersOf(answers))
 		assertMissing(t, err, casetype.QuestionRecommendationRequestedAction)
 		assertMissing(t, err, casetype.QuestionImpactWorkaround)
 	})
 
 	t.Run("生成された報告書がOverview、SBAR、Otherに回答を正しく保持する", func(t *testing.T) {
 		answers := validPCTeamPowerOffAnswers()
-		report, err := service.Create(casetype.TroubleTypePC, casetype.ImpactLevelTeam, answersOf(answers))
+		report, err := service.NewTroubleReport(casetype.TroubleTypePC, casetype.ImpactLevelTeam, answersOf(answers))
 		if err != nil {
 			t.Fatalf("Create() error = %v", err)
 		}
@@ -288,7 +288,7 @@ func TestCreate(t *testing.T) {
 			t.Fatalf("NewAnswersFromStrings() error = %v", err)
 		}
 
-		report, err := service.Create(casetype.TroubleTypePC, casetype.ImpactLevelTeam, answers)
+		report, err := service.NewTroubleReport(casetype.TroubleTypePC, casetype.ImpactLevelTeam, answers)
 		if err != nil {
 			t.Fatalf("Create() error = %v", err)
 		}
@@ -346,7 +346,7 @@ func validNetworkIndividualAnswers() map[model.QuestionID]string {
 	}
 }
 
-func assertContains(t *testing.T, def model.ReportDefinition, ids ...model.QuestionID) {
+func assertContains(t *testing.T, def model.FormSchema, ids ...model.QuestionID) {
 	t.Helper()
 	for _, id := range ids {
 		if !def.Contains(id) {
@@ -355,7 +355,7 @@ func assertContains(t *testing.T, def model.ReportDefinition, ids ...model.Quest
 	}
 }
 
-func assertAbsent(t *testing.T, def model.ReportDefinition, ids ...model.QuestionID) {
+func assertAbsent(t *testing.T, def model.FormSchema, ids ...model.QuestionID) {
 	t.Helper()
 	for _, id := range ids {
 		if def.Contains(id) {
@@ -364,7 +364,7 @@ func assertAbsent(t *testing.T, def model.ReportDefinition, ids ...model.Questio
 	}
 }
 
-func assertRequired(t *testing.T, def model.ReportDefinition, ids ...model.QuestionID) {
+func assertRequired(t *testing.T, def model.FormSchema, ids ...model.QuestionID) {
 	t.Helper()
 	for _, id := range ids {
 		question, ok := def.Question(id)

@@ -7,19 +7,19 @@ import (
 	"domain_service_study/internal/domain/valueobject"
 )
 
-func TestReportDefinitionCombineRejectsDuplicateQuestionID(t *testing.T) {
+func TestFormSchemaCombineRejectsDuplicateQuestionID(t *testing.T) {
 	summary := MustQuestionID("overview.summary")
-	base, err := NewReportDefinition(
+	base, err := NewFormSchema(
 		NewQuestionDefinition(summary, valueobject.SectionOverview, valueobject.MustPrompt("概要"), true),
 	)
 	if err != nil {
-		t.Fatalf("NewReportDefinition() error = %v", err)
+		t.Fatalf("NewFormSchema() error = %v", err)
 	}
-	other, err := NewReportDefinition(
+	other, err := NewFormSchema(
 		NewQuestionDefinition(summary, valueobject.SectionOverview, valueobject.MustPrompt("別の概要"), false),
 	)
 	if err != nil {
-		t.Fatalf("NewReportDefinition() error = %v", err)
+		t.Fatalf("NewFormSchema() error = %v", err)
 	}
 
 	_, err = base.Combine(other)
@@ -36,20 +36,20 @@ func TestReportDefinitionCombineRejectsDuplicateQuestionID(t *testing.T) {
 	}
 }
 
-func TestReportDefinitionCombineDoesNotMutateOriginal(t *testing.T) {
+func TestFormSchemaCombineDoesNotMutateOriginal(t *testing.T) {
 	summary := MustQuestionID("overview.summary")
 	powerOn := MustQuestionID("pc.power_on")
-	base, err := NewReportDefinition(
+	base, err := NewFormSchema(
 		NewQuestionDefinition(summary, valueobject.SectionOverview, valueobject.MustPrompt("概要"), true),
 	)
 	if err != nil {
-		t.Fatalf("NewReportDefinition() error = %v", err)
+		t.Fatalf("NewFormSchema() error = %v", err)
 	}
-	other, err := NewReportDefinition(
+	other, err := NewFormSchema(
 		NewQuestionDefinition(powerOn, valueobject.SectionSituation, valueobject.MustPrompt("電源"), true),
 	)
 	if err != nil {
-		t.Fatalf("NewReportDefinition() error = %v", err)
+		t.Fatalf("NewFormSchema() error = %v", err)
 	}
 
 	combined, err := base.Combine(other)
@@ -64,13 +64,13 @@ func TestReportDefinitionCombineDoesNotMutateOriginal(t *testing.T) {
 	}
 }
 
-func TestReportDefinitionOverrideRequired(t *testing.T) {
+func TestFormSchemaOverrideRequired(t *testing.T) {
 	requested := MustQuestionID("recommendation.requested_action")
-	def, err := NewReportDefinition(
+	def, err := NewFormSchema(
 		NewQuestionDefinition(requested, valueobject.SectionRecommendation, valueobject.MustPrompt("対応"), false),
 	)
 	if err != nil {
-		t.Fatalf("NewReportDefinition() error = %v", err)
+		t.Fatalf("NewFormSchema() error = %v", err)
 	}
 
 	overridden, err := def.OverrideRequired(requested, true)

@@ -5,34 +5,37 @@ import (
 )
 
 // TroubleReportService は TroubleReport の生成窓口。
-// アプリケーション層は model.NewTroubleReport を直接呼ばず、このサービスの Create を使う。
+// アプリケーション層は model.NewTroubleReport を直接呼ばず、このサービスの NewTroubleReport を使う。
 type TroubleReportService struct {
-	composer DefinitionComposer
+	composer FormSchemaComposer
 }
 
-func NewTroubleReportService(composer DefinitionComposer) TroubleReportService {
+// NewTroubleReportService は TroubleReportService を生成する。
+func NewTroubleReportService(composer FormSchemaComposer) TroubleReportService {
 	return TroubleReportService{composer: composer}
 }
 
-func (s TroubleReportService) Definition(
+// NewFormSchema はトラブル種類・影響度・回答に基づいて、今回有効な質問項目定義を生成する。
+func (s TroubleReportService) NewFormSchema(
 	troubleType model.TroubleType,
 	impactLevel model.ImpactLevel,
 	answers model.Answers,
-) (model.ReportDefinition, error) {
-	return s.composer.Compose(troubleType, impactLevel, answers)
+) (model.FormSchema, error) {
+	return s.composer.NewFormSchema(troubleType, impactLevel, answers)
 }
 
-func (s TroubleReportService) Create(
+// NewTroubleReport は質問項目定義を生成し、必須回答を検証したうえで TroubleReport を生成する。
+func (s TroubleReportService) NewTroubleReport(
 	troubleType model.TroubleType,
 	impactLevel model.ImpactLevel,
 	answers model.Answers,
 ) (*model.TroubleReport, error) {
-	def, err := s.composer.Compose(troubleType, impactLevel, answers)
+	schema, err := s.composer.NewFormSchema(troubleType, impactLevel, answers)
 	if err != nil {
 		return nil, err
 	}
-	if err := def.Validate(answers); err != nil {
+	if err := schema.Validate(answers); err != nil {
 		return nil, err
 	}
-	return model.NewTroubleReport(troubleType, impactLevel, def, answers), nil
+	return model.NewTroubleReport(troubleType, impactLevel, schema, answers), nil
 }
